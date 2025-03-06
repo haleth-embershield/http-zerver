@@ -147,6 +147,14 @@ fn handleConnection(client_socket: os.Socket, directory: []const u8) void {
         return;
     }
 
+    // Special case for root path
+    if (request.path.len == 0 or eql(request.path, "/")) {
+        var index_path_buf: [260]u8 = undefined;
+        const index_path = os.constructFilePath(&index_path_buf, directory, "/", "index.html");
+        os.serveFile(client_socket, index_path, send_body);
+        return;
+    }
+
     // Construct directory path first (without index.html)
     var dir_path_buf: [260]u8 = undefined;
     const dir_path = os.constructFilePath(&dir_path_buf, directory, request.path, "");
@@ -154,15 +162,16 @@ fn handleConnection(client_socket: os.Socket, directory: []const u8) void {
     // Check if it's a directory first
     if (os.isDirectory(dir_path)) {
         // If it's a directory and doesn't end with '/', redirect
-        if (request.path.len == 0 or request.path[request.path.len - 1] != '/') {
+        if (request.path[request.path.len - 1] != '/') {
             sendRedirect(client_socket, request.path);
             return;
         }
 
         // Try to serve index.html in the directory
         var index_path_buf: [260]u8 = undefined;
-        const index_path = os.constructFilePath(&index_path_buf, directory, if (request.path.len > 0) request.path else "/", "index.html");
+        const index_path = os.constructFilePath(&index_path_buf, directory, request.path, "index.html");
 
+        // Try to serve the index file first
         if (!os.isDirectory(index_path)) {
             os.serveFile(client_socket, index_path, send_body);
             return;

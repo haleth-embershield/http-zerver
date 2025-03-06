@@ -237,7 +237,7 @@ pub fn constructFilePath(buf: []u8, dir: []const u8, path: []const u8, default_f
     req_path = req_path[0..query_pos];
 
     // Add default file or request path
-    if (req_path.len == 0) {
+    if (req_path.len == 0 or (req_path.len == 1 and req_path[0] == '/')) {
         if (default_file.len > 0) {
             for (default_file) |c| {
                 buf[len] = c;
