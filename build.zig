@@ -1,7 +1,7 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
-    // Standard target options
+    // Standard target options (defaults to host system unless overridden)
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
@@ -41,17 +41,18 @@ pub fn build(b: *std.Build) void {
     // Install the executable
     b.installArtifact(exe);
 
-    // Create a run step
+    // Create a run step (basic run with arguments)
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
+    if (b.args) |args| {
+        run_cmd.addArgs(args);
+    }
 
     // Create a custom run step that:
     // 1. Deletes all files in /www
     // 2. Copies /assets to /www
     // 3. Copies the executable to /www
     // 4. Runs the server from /www on port 8000
-
-    // Create a custom run step
     const custom_run_step = b.step("run", "Run the HTTP server from /www directory");
 
     // Platform-specific commands for directory operations
@@ -78,21 +79,22 @@ pub fn build(b: *std.Build) void {
     copy_assets.step.dependOn(&clear_www.step);
 
     // Copy executable
+    const exe_path = b.fmt("{s}/bin/http-zerver{s}", .{ b.install_path, if (target.result.os.tag == .windows) ".exe" else "" });
     const copy_exe = if (target.result.os.tag == .windows) b.addSystemCommand(&[_][]const u8{
         "powershell",
         "-Command",
         "Copy-Item",
-        b.fmt("{s}/bin/http-zerver.exe", .{b.install_path}),
+        exe_path,
         "www/http-zerver.exe",
     }) else b.addSystemCommand(&[_][]const u8{
-        "sh",
-        "-c",
-        b.fmt("cp {s}/bin/http-zerver www/http-zerver", .{b.install_path}),
+        "cp",
+        exe_path,
+        "www/http-zerver",
     });
     copy_exe.step.dependOn(b.getInstallStep());
     copy_exe.step.dependOn(&copy_assets.step);
 
-    // Run server
+    // Run server from /www
     const run_server = if (target.result.os.tag == .windows) b.addSystemCommand(&[_][]const u8{
         "powershell",
         "-Command",

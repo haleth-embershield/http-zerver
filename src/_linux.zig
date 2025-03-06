@@ -1,6 +1,8 @@
 // linux.zig: Linux-specific implementation using POSIX APIs without std
 
-// POSIX constants
+const builtin = @import("builtin");
+
+// POSIX constants (architecture-independent)
 const AF_INET = 2;
 const SOCK_STREAM = 1;
 const IPPROTO_TCP = 6;
@@ -17,12 +19,66 @@ const SEEK_END = 2;
 const SEEK_SET = 0;
 const S_IFDIR = 16384;
 const DT_DIR = 4;
+const AT_FDCWD = -100; // For SYS_openat on aarch64
 
 // Maximum buffer size for read/write operations (2GB)
 const MAX_BUFFER_SIZE: i64 = 2147483647;
 
 pub const Socket = i32;
 
+// Architecture-specific syscall numbers
+const SyscallNumbers = switch (builtin.cpu.arch) {
+    .x86_64 => struct {
+        const SYS_write = 1;
+        const SYS_open = 2;
+        const SYS_close = 3;
+        const SYS_stat = 4;
+        const SYS_fstat = 5;
+        const SYS_lseek = 8;
+        const SYS_read = 0;
+        const SYS_socket = 41;
+        const SYS_accept = 43;
+        const SYS_bind = 49;
+        const SYS_listen = 50;
+        const SYS_setsockopt = 54;
+        const SYS_shutdown = 48;
+        const SYS_getdents64 = 217;
+    },
+    .aarch64 => struct {
+        const SYS_write = 64;
+        const SYS_openat = 56; // Use openat instead of open on aarch64
+        const SYS_close = 57;
+        const SYS_stat = 80;
+        const SYS_fstat = 80;
+        const SYS_lseek = 62;
+        const SYS_read = 63;
+        const SYS_socket = 198;
+        const SYS_accept = 202;
+        const SYS_bind = 200;
+        const SYS_listen = 201;
+        const SYS_setsockopt = 208;
+        const SYS_shutdown = 210;
+        const SYS_getdents64 = 61;
+    },
+    else => @compileError("Unsupported architecture"),
+};
+
+// Alias syscall numbers for cleaner usage
+const SYS_write = SyscallNumbers.SYS_write;
+const SYS_close = SyscallNumbers.SYS_close;
+const SYS_stat = SyscallNumbers.SYS_stat;
+const SYS_fstat = SyscallNumbers.SYS_fstat;
+const SYS_lseek = SyscallNumbers.SYS_lseek;
+const SYS_read = SyscallNumbers.SYS_read;
+const SYS_socket = SyscallNumbers.SYS_socket;
+const SYS_accept = SyscallNumbers.SYS_accept;
+const SYS_bind = SyscallNumbers.SYS_bind;
+const SYS_listen = SyscallNumbers.SYS_listen;
+const SYS_setsockopt = SyscallNumbers.SYS_setsockopt;
+const SYS_shutdown = SyscallNumbers.SYS_shutdown;
+const SYS_getdents64 = SyscallNumbers.SYS_getdents64;
+
+// Structure definitions
 const sockaddr_in = extern struct {
     sin_family: i16,
     sin_port: u16,
@@ -64,25 +120,9 @@ const stat = extern struct {
     __unused: [3]i64,
 };
 
-// Linux syscall numbers (x86_64)
-const SYS_write = 1;
-const SYS_open = 2;
-const SYS_close = 3;
-const SYS_stat = 4;
-const SYS_fstat = 5;
-const SYS_lseek = 8;
-const SYS_read = 0;
-const SYS_socket = 41;
-const SYS_accept = 43;
-const SYS_bind = 49;
-const SYS_listen = 50;
-const SYS_setsockopt = 54;
-const SYS_shutdown = 48;
-const SYS_getdents64 = 217;
-
 extern "c" fn syscall(number: i64, ...) i64;
 
-// Initialize networking (no-op on Linux as it's not needed)
+// Initialize networking (no-op on Linux)
 pub fn initNetworking() !void {
     // Nothing needed for Linux
 }
@@ -242,7 +282,7 @@ pub fn constructFilePath(buf: []u8, dir: []const u8, path: []const u8, default_f
         }
     }
 
-    // Remove trailing slash for directories (Linux opendir doesn't like it)
+    // Remove trailing slash for directories
     if (len > 0 and buf[len - 1] == '/') {
         len -= 1;
     }
@@ -254,7 +294,6 @@ pub fn constructFilePath(buf: []u8, dir: []const u8, path: []const u8, default_f
 }
 
 pub fn isDirectory(path: []const u8) bool {
-    // Handle leading ./
     var clean_path = path;
     if (path.len >= 2 and path[0] == '.' and path[1] == '/') {
         clean_path = path[2..];
@@ -267,13 +306,17 @@ pub fn isDirectory(path: []const u8) bool {
 
 pub fn serveFile(client_socket: Socket, path: []const u8, send_body: bool, method: []const u8, request_path: []const u8) void {
     const http = @import("http.zig");
-    // Handle leading ./
     var clean_path = path;
     if (path.len >= 2 and path[0] == '.' and path[1] == '/') {
         clean_path = path[2..];
     }
 
-    const fd = syscall(SYS_open, clean_path.ptr, @as(i64, O_RDONLY));
+    // Use SYS_open for x86_64, SYS_openat for aarch64
+    const fd = switch (builtin.cpu.arch) {
+        .x86_64 => syscall(SyscallNumbers.SYS_open, clean_path.ptr, @as(i64, O_RDONLY)),
+        .aarch64 => syscall(SyscallNumbers.SYS_openat, AT_FDCWD, clean_path.ptr, @as(i64, O_RDONLY), 0),
+        else => unreachable,
+    };
     if (fd < 0) {
         http.logResponse(method, request_path, "text/plain", 404, "Not Found");
         http.sendErrorResponse(client_socket, 404, "Not Found", send_body);
@@ -295,7 +338,6 @@ pub fn serveFile(client_socket: Socket, path: []const u8, send_body: bool, metho
     var header_buf: [1024]u8 = undefined;
     var header_len: usize = 0;
 
-    // Build response headers
     const status = "HTTP/1.1 200 OK\r\n";
     for (status) |c| {
         header_buf[header_len] = c;
@@ -346,19 +388,21 @@ pub fn serveFile(client_socket: Socket, path: []const u8, send_body: bool, metho
 }
 
 pub fn serveDirectory(client_socket: Socket, path: []const u8, request_path: []const u8, send_body: bool) void {
-    // Clean the path for Linux
     var clean_path = path;
     if (path.len >= 2 and path[0] == '.' and path[1] == '/') {
         clean_path = path[2..];
     }
 
-    // Remove trailing slash if present
     if (clean_path.len > 0 and clean_path[clean_path.len - 1] == '/') {
         clean_path = clean_path[0 .. clean_path.len - 1];
     }
 
-    // Open the directory using open()
-    const dir_fd = syscall(SYS_open, clean_path.ptr, @as(i64, O_RDONLY));
+    // Use SYS_open for x86_64, SYS_openat for aarch64
+    const dir_fd = switch (builtin.cpu.arch) {
+        .x86_64 => syscall(SyscallNumbers.SYS_open, clean_path.ptr, @as(i64, O_RDONLY)),
+        .aarch64 => syscall(SyscallNumbers.SYS_openat, AT_FDCWD, clean_path.ptr, @as(i64, O_RDONLY), 0),
+        else => unreachable,
+    };
     if (dir_fd < 0) {
         @import("http.zig").sendErrorResponse(client_socket, 500, "Error listing directory", send_body);
         return;
@@ -370,7 +414,6 @@ pub fn serveDirectory(client_socket: Socket, path: []const u8, request_path: []c
     var file_count: u32 = 0;
 
     if (send_body) {
-        // Build HTML header
         const html_header = "<!DOCTYPE HTML>\n<html>\n<head>\n<title>Directory listing for ";
         for (html_header) |c| {
             html_buf[html_len] = c;
@@ -399,7 +442,6 @@ pub fn serveDirectory(client_socket: Socket, path: []const u8, request_path: []c
             html_len += 1;
         }
 
-        // Add parent directory link if not root
         if (request_path.len > 1) {
             const parent_link = "<li><a href=\"..\">..</a></li>\n";
             for (parent_link) |c| {
@@ -409,9 +451,8 @@ pub fn serveDirectory(client_socket: Socket, path: []const u8, request_path: []c
         }
     }
 
-    // List directory contents
     const http = @import("http.zig");
-    var dir_buf: [8192]u8 align(8) = undefined; // Ensure buffer is properly aligned
+    var dir_buf: [8192]u8 align(8) = undefined;
 
     while (true) {
         const bytes_read = syscall(SYS_getdents64, dir_fd, &dir_buf, dir_buf.len);
