@@ -20,7 +20,7 @@ fn print(message: []const u8) void {
 }
 
 // Parse command line arguments
-fn parseArgs() !struct { port: u16, directory: []const u8, verbose: bool } {
+fn parseArgs() !struct { port: u16, directory: []const u8 } {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -34,28 +34,20 @@ fn parseArgs() !struct { port: u16, directory: []const u8, verbose: bool } {
     // Default values
     var port: u16 = 8000;
     var directory: []const u8 = ".";
-    var verbose: bool = false;
 
     // Parse arguments
     while (args.next()) |arg| {
-        if (std.mem.startsWith(u8, arg, "-")) {
-            // Handle flags
-            if (std.mem.eql(u8, arg, "-v") or std.mem.eql(u8, arg, "--verbose")) {
-                verbose = true;
-            }
+        // Handle positional arguments
+        if (port == 8000) {
+            // First positional arg is port
+            port = parsePort(arg);
         } else {
-            // Handle positional arguments
-            if (port == 8000) {
-                // First positional arg is port
-                port = parsePort(arg);
-            } else {
-                // Second positional arg is directory
-                directory = arg;
-            }
+            // Second positional arg is directory
+            directory = arg;
         }
     }
 
-    return .{ .port = port, .directory = directory, .verbose = verbose };
+    return .{ .port = port, .directory = directory };
 }
 
 // Parse port number from string
@@ -75,19 +67,15 @@ fn parsePort(str: []const u8) u16 {
 pub fn main() !void {
     const args = try parseArgs();
 
-    // print("\nbuild yourself: https://github.com/haleth-embershield/http-zerver\n");
     print("\nStarting HTTP Zerver...\n");
     print(version.getVersionString());
     print("\nListening at http://localhost:");
     os.printInt(args.port);
     print("\nServing directory: ");
     print(args.directory);
-    if (args.verbose) {
-        print("\nVerbose logging: enabled");
-    }
     print("\n\n");
 
-    try http.serve(args.port, args.directory, args.verbose);
+    try http.serve(args.port, args.directory);
 }
 
 // Print integer to console

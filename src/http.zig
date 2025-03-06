@@ -93,20 +93,22 @@ pub fn parseRequest(buffer: []const u8) !HttpRequest {
     };
 }
 
-// Log request info
-fn logRequest(method: []const u8, path: []const u8) void {
+// Log request info with response data
+fn logResponse(method: []const u8, path: []const u8, mime_type: []const u8, status_code: u32, status_text: []const u8) void {
     os.print(method);
     os.print(" '");
     os.print(path);
     os.print("' --> Content-Type: ");
-    os.print(getMimeType(path));
-    os.print(" --> HTTP/1.1 200 OK\n");
+    os.print(mime_type);
+    os.print(" --> HTTP/1.1 ");
+    os.printInt(@intCast(status_code));
+    os.print(" ");
+    os.print(status_text);
+    os.print("\n");
 }
 
 // Main server function
-pub fn serve(port: u16, directory: []const u8, verbose: bool) !void {
-    verbose_logging = verbose;
-
+pub fn serve(port: u16, directory: []const u8) !void {
     // Initialize OS-specific networking
     try os.initNetworking();
     defer os.cleanupNetworking();
@@ -130,14 +132,14 @@ fn handleConnection(client_socket: os.Socket, directory: []const u8) void {
     if (bytes_received <= 0) return;
 
     const request = parseRequest(buffer[0..@intCast(bytes_received)]) catch {
+        logResponse("???", "???", "text/plain", 400, "Bad Request");
         sendErrorResponse(client_socket, 400, "Bad Request", false);
         return;
     };
 
-    logRequest(request.method, request.path);
-
     const send_body = eql(request.method, "GET");
     if (!eql(request.method, "GET") and !eql(request.method, "HEAD")) {
+        logResponse(request.method, request.path, "text/plain", 405, "Method Not Allowed");
         sendErrorResponse(client_socket, 405, "Method Not Allowed", send_body);
         return;
     }
@@ -146,6 +148,7 @@ fn handleConnection(client_socket: os.Socket, directory: []const u8) void {
     if (request.path.len == 0 or eql(request.path, "/")) {
         var index_path_buf: [260]u8 = undefined;
         const index_path = os.constructFilePath(&index_path_buf, directory, "/", "index.html");
+        logResponse(request.method, request.path, getMimeType(index_path), 200, "OK");
         os.serveFile(client_socket, index_path, send_body);
         return;
     }
@@ -158,6 +161,7 @@ fn handleConnection(client_socket: os.Socket, directory: []const u8) void {
     if (os.isDirectory(dir_path)) {
         // If it's a directory and doesn't end with '/', redirect
         if (request.path[request.path.len - 1] != '/') {
+            logResponse(request.method, request.path, "text/plain", 301, "Moved Permanently");
             sendRedirect(client_socket, request.path);
             return;
         }
@@ -168,11 +172,13 @@ fn handleConnection(client_socket: os.Socket, directory: []const u8) void {
 
         // Try to serve the index file first
         if (!os.isDirectory(index_path)) {
+            logResponse(request.method, request.path, getMimeType(index_path), 200, "OK");
             os.serveFile(client_socket, index_path, send_body);
             return;
         }
 
         // Fall back to directory listing
+        logResponse(request.method, request.path, "text/html", 200, "OK");
         os.serveDirectory(client_socket, dir_path, request.path, send_body);
         return;
     }
@@ -180,6 +186,7 @@ fn handleConnection(client_socket: os.Socket, directory: []const u8) void {
     // Try to serve the file directly
     var file_path_buf: [260]u8 = undefined;
     const file_path = os.constructFilePath(&file_path_buf, directory, request.path, "");
+    logResponse(request.method, request.path, getMimeType(file_path), 200, "OK");
     os.serveFile(client_socket, file_path, send_body);
 }
 
