@@ -95,11 +95,12 @@ pub fn parseRequest(buffer: []const u8) !HttpRequest {
 
 // Log request info
 fn logRequest(method: []const u8, path: []const u8) void {
-    if (!verbose_logging) return;
     os.print(method);
-    os.print(" ");
+    os.print(" '");
     os.print(path);
-    os.print("\n");
+    os.print("' --> Content-Type: ");
+    os.print(getMimeType(path));
+    os.print(" --> HTTP/1.1 200 OK\n");
 }
 
 // Main server function

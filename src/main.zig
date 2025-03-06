@@ -75,8 +75,8 @@ fn parsePort(str: []const u8) u16 {
 pub fn main() !void {
     const args = try parseArgs();
 
-    print("build yourself: https://github.com/haleth-embershield/http-zerver\n\n");
-    print("http-zerver: Starting HTTP server\n");
+    // print("\nbuild yourself: https://github.com/haleth-embershield/http-zerver\n");
+    print("\nStarting HTTP Zerver...\n");
     print(version.getVersionString());
     print("\nListening at http://localhost:");
     os.printInt(args.port);

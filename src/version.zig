@@ -1,5 +1,5 @@
 // Version information for http-zerver
-pub const VERSION = "1.0.0";
+pub const VERSION = "2025.03.06";
 pub const BUILD_DATE = @embedFile("version_date.txt");
 
 // Platform information

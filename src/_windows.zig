@@ -102,12 +102,12 @@ extern "kernel32" fn GetFileSizeEx(
 ) callconv(.C) i32;
 extern "kernel32" fn GetFileAttributesA(lpFileName: [*:0]const u8) callconv(.C) u32;
 extern "kernel32" fn GetStdHandle(nStdHandle: u32) callconv(.C) usize;
-extern "kernel32" fn WriteConsoleA(
-    hConsoleOutput: usize,
+extern "kernel32" fn WriteFile(
+    hFile: usize,
     lpBuffer: [*]const u8,
-    nNumberOfCharsToWrite: u32,
-    lpNumberOfCharsWritten: *u32,
-    lpReserved: ?*anyopaque,
+    nNumberOfBytesToWrite: u32,
+    lpNumberOfBytesWritten: *u32,
+    lpOverlapped: ?*anyopaque,
 ) callconv(.C) i32;
 extern "kernel32" fn FindFirstFileA(lpFileName: [*:0]const u8, lpFindFileData: *WIN32_FIND_DATA) callconv(.C) usize;
 extern "kernel32" fn FindNextFileA(hFindFile: usize, lpFindFileData: *WIN32_FIND_DATA) callconv(.C) i32;
@@ -193,7 +193,7 @@ pub fn sendData(sock: Socket, data: []const u8) usize {
 pub fn print(message: []const u8) void {
     const stdout = GetStdHandle(0xFFFFFFF5); // STD_OUTPUT_HANDLE
     var written: u32 = 0;
-    _ = WriteConsoleA(stdout, message.ptr, @intCast(message.len), &written, null);
+    _ = WriteFile(stdout, message.ptr, @intCast(message.len), &written, null);
 }
 
 pub fn printInt(n: u16) void {
