@@ -1,6 +1,6 @@
 # Generate a large test file for performance testing
 param(
-    [string]$OutputFile = "largefile.bin",
+    [string]$OutputFile = "assets/largefile.bin",
     [int]$SizeMB = 10
 )
 

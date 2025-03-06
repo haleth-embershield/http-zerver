@@ -340,8 +340,10 @@ pub fn serveFile(client_socket: Socket, path: []const u8, send_body: bool) void 
 pub fn serveDirectory(client_socket: Socket, path: []const u8, request_path: []const u8, send_body: bool) void {
     var search_pattern: [512]u8 = undefined;
     var pattern_len: usize = 0;
-    for (path) |c| search_pattern[pattern_len] = c;
-    pattern_len += 1;
+    for (path) |c| {
+        search_pattern[pattern_len] = c;
+        pattern_len += 1;
+    }
     search_pattern[pattern_len] = '\\';
     pattern_len += 1;
     search_pattern[pattern_len] = '*';
@@ -361,23 +363,41 @@ pub fn serveDirectory(client_socket: Socket, path: []const u8, request_path: []c
     var file_count: u32 = 0;
 
     if (send_body) {
+        // HTML header
         const html_header = "<!DOCTYPE HTML>\n<html>\n<head>\n<title>Directory listing for ";
-        for (html_header) |c| html_buf[html_len] = c;
-        html_len += 1;
-        for (request_path) |c| html_buf[html_len] = c;
-        html_len += 1;
+        for (html_header) |c| {
+            html_buf[html_len] = c;
+            html_len += 1;
+        }
+
+        for (request_path) |c| {
+            html_buf[html_len] = c;
+            html_len += 1;
+        }
+
         const html_header2 = "</title>\n</head>\n<body>\n<h1>Directory listing for ";
-        for (html_header2) |c| html_buf[html_len] = c;
-        html_len += 1;
-        for (request_path) |c| html_buf[html_len] = c;
-        html_len += 1;
+        for (html_header2) |c| {
+            html_buf[html_len] = c;
+            html_len += 1;
+        }
+
+        for (request_path) |c| {
+            html_buf[html_len] = c;
+            html_len += 1;
+        }
+
         const html_list_start = "</h1>\n<hr>\n<ul>\n";
-        for (html_list_start) |c| html_buf[html_len] = c;
-        html_len += 1;
+        for (html_list_start) |c| {
+            html_buf[html_len] = c;
+            html_len += 1;
+        }
+
         if (request_path.len > 1) {
             const parent_link = "<li><a href=\"..\">..</a></li>\n";
-            for (parent_link) |c| html_buf[html_len] = c;
-            html_len += 1;
+            for (parent_link) |c| {
+                html_buf[html_len] = c;
+                html_len += 1;
+            }
         }
     }
 
@@ -389,31 +409,46 @@ pub fn serveDirectory(client_socket: Socket, path: []const u8, request_path: []c
             filename_len += 1;
         }
         const filename = find_data.cFileName[0..filename_len];
+
         if (!http.eql(filename, ".") and !http.eql(filename, "..")) {
             file_count += 1;
             if (send_body) {
                 const li_start = "<li><a href=\"";
-                for (li_start) |c| html_buf[html_len] = c;
-                html_len += 1;
-                for (filename) |c| html_buf[html_len] = c;
-                html_len += 1;
+                for (li_start) |c| {
+                    html_buf[html_len] = c;
+                    html_len += 1;
+                }
+
+                for (filename) |c| {
+                    html_buf[html_len] = c;
+                    html_len += 1;
+                }
+
                 if ((find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
                     html_buf[html_len] = '/';
                     html_len += 1;
                 }
+
                 html_buf[html_len] = '"';
                 html_len += 1;
                 html_buf[html_len] = '>';
                 html_len += 1;
-                for (filename) |c| html_buf[html_len] = c;
-                html_len += 1;
+
+                for (filename) |c| {
+                    html_buf[html_len] = c;
+                    html_len += 1;
+                }
+
                 if ((find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
                     html_buf[html_len] = '/';
                     html_len += 1;
                 }
+
                 const item_end = "</a></li>\n";
-                for (item_end) |c| html_buf[html_len] = c;
-                html_len += 1;
+                for (item_end) |c| {
+                    html_buf[html_len] = c;
+                    html_len += 1;
+                }
             }
         }
         has_more_files = FindNextFileA(find_handle, &find_data) != 0;
@@ -421,23 +456,34 @@ pub fn serveDirectory(client_socket: Socket, path: []const u8, request_path: []c
 
     if (send_body) {
         const html_footer = "</ul>\n<hr>\n</body>\n</html>\n";
-        for (html_footer) |c| html_buf[html_len] = c;
-        html_len += 1;
+        for (html_footer) |c| {
+            html_buf[html_len] = c;
+            html_len += 1;
+        }
     } else {
         html_len = 500 + (file_count * 50);
     }
 
+    // Send HTTP headers
     var header_buf: [1024]u8 = undefined;
     var header_len: usize = 0;
+
     const status = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: ";
-    for (status) |c| header_buf[header_len] = c;
-    header_len += 1;
+    for (status) |c| {
+        header_buf[header_len] = c;
+        header_len += 1;
+    }
+
     header_len += intToBuffer(header_buf[header_len..], html_len);
+
     const end_headers = "\r\nConnection: close\r\n\r\n";
-    for (end_headers) |c| header_buf[header_len] = c;
-    header_len += 1;
+    for (end_headers) |c| {
+        header_buf[header_len] = c;
+        header_len += 1;
+    }
 
     _ = sendData(client_socket, header_buf[0..header_len]);
+
     if (send_body) {
         _ = sendData(client_socket, html_buf[0..html_len]);
     }
