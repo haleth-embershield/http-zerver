@@ -266,21 +266,26 @@ pub fn isDirectory(path: []const u8) bool {
     return attrs != 0xFFFFFFFF and (attrs & FILE_ATTRIBUTE_DIRECTORY) != 0;
 }
 
-pub fn serveFile(client_socket: Socket, path: []const u8, send_body: bool) void {
+pub fn serveFile(client_socket: Socket, path: []const u8, send_body: bool, method: []const u8, request_path: []const u8) void {
+    const http = @import("http.zig");
     const file_handle = CreateFileA(@ptrCast(path.ptr), GENERIC_READ, FILE_SHARE_READ, null, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, null);
     if (file_handle == INVALID_HANDLE_VALUE) {
-        @import("http.zig").sendErrorResponse(client_socket, 404, "Not Found", send_body);
+        http.logResponse(method, request_path, "text/plain", 404, "Not Found");
+        http.sendErrorResponse(client_socket, 404, "Not Found", send_body);
         return;
     }
     defer _ = CloseHandle(file_handle);
 
     var file_size: LARGE_INTEGER = undefined;
     if (GetFileSizeEx(file_handle, &file_size) == 0) {
-        @import("http.zig").sendErrorResponse(client_socket, 500, "Internal Server Error", send_body);
+        http.logResponse(method, request_path, "text/plain", 500, "Internal Server Error");
+        http.sendErrorResponse(client_socket, 500, "Internal Server Error", send_body);
         return;
     }
 
-    const mime_type = @import("http.zig").getMimeType(path);
+    const mime_type = http.getMimeType(path);
+    http.logResponse(method, request_path, mime_type, 200, "OK");
+
     var header_buf: [1024]u8 = undefined;
     var header_len: usize = 0;
 

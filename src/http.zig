@@ -94,7 +94,7 @@ pub fn parseRequest(buffer: []const u8) !HttpRequest {
 }
 
 // Log request info with response data
-fn logResponse(method: []const u8, path: []const u8, mime_type: []const u8, status_code: u32, status_text: []const u8) void {
+pub fn logResponse(method: []const u8, path: []const u8, mime_type: []const u8, status_code: u32, status_text: []const u8) void {
     os.print(method);
     os.print(" '");
     os.print(path);
@@ -148,8 +148,7 @@ fn handleConnection(client_socket: os.Socket, directory: []const u8) void {
     if (request.path.len == 0 or eql(request.path, "/")) {
         var index_path_buf: [260]u8 = undefined;
         const index_path = os.constructFilePath(&index_path_buf, directory, "/", "index.html");
-        logResponse(request.method, request.path, getMimeType(index_path), 200, "OK");
-        os.serveFile(client_socket, index_path, send_body);
+        os.serveFile(client_socket, index_path, send_body, request.method, request.path);
         return;
     }
 
@@ -172,8 +171,7 @@ fn handleConnection(client_socket: os.Socket, directory: []const u8) void {
 
         // Try to serve the index file first
         if (!os.isDirectory(index_path)) {
-            logResponse(request.method, request.path, getMimeType(index_path), 200, "OK");
-            os.serveFile(client_socket, index_path, send_body);
+            os.serveFile(client_socket, index_path, send_body, request.method, request.path);
             return;
         }
 
@@ -186,8 +184,7 @@ fn handleConnection(client_socket: os.Socket, directory: []const u8) void {
     // Try to serve the file directly
     var file_path_buf: [260]u8 = undefined;
     const file_path = os.constructFilePath(&file_path_buf, directory, request.path, "");
-    logResponse(request.method, request.path, getMimeType(file_path), 200, "OK");
-    os.serveFile(client_socket, file_path, send_body);
+    os.serveFile(client_socket, file_path, send_body, request.method, request.path);
 }
 
 fn sendRedirect(client_socket: os.Socket, path: []const u8) void {
