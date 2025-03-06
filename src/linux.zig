@@ -78,9 +78,7 @@ const SYS_bind = 49;
 const SYS_listen = 50;
 const SYS_setsockopt = 54;
 const SYS_shutdown = 48;
-const SYS_opendir = 84;
-const SYS_readdir = 85;
-const SYS_closedir = 86;
+const SYS_getdents64 = 217;
 
 extern "c" fn syscall(number: i64, ...) i64;
 
@@ -203,16 +201,33 @@ pub fn intToBuffer(buffer: []u8, value: anytype) usize {
 pub fn constructFilePath(buf: []u8, dir: []const u8, path: []const u8, default_file: []const u8) []u8 {
     var len: usize = 0;
 
-    // Copy directory path
-    for (dir) |c| {
-        buf[len] = c;
-        len += 1;
+    // Debug: Print input parameters
+    print("DEBUG: Constructing path:\n  dir='");
+    print(dir);
+    print("'\n  path='");
+    print(path);
+    print("'\n  default_file='");
+    print(default_file);
+    print("'\n");
+
+    // Handle directory path - remove leading ./ if present
+    var clean_dir = dir;
+    if (dir.len >= 2 and dir[0] == '.' and dir[1] == '/') {
+        clean_dir = dir[2..];
     }
 
-    // Add separator if needed
-    if (len > 0 and buf[len - 1] != '/') {
-        buf[len] = '/';
-        len += 1;
+    // Copy directory path, but skip if it's just "."
+    if (clean_dir.len > 0 and !(clean_dir.len == 1 and clean_dir[0] == '.')) {
+        for (clean_dir) |c| {
+            buf[len] = c;
+            len += 1;
+        }
+
+        // Add separator if needed
+        if (len > 0 and buf[len - 1] != '/') {
+            buf[len] = '/';
+            len += 1;
+        }
     }
 
     // Handle request path
@@ -223,9 +238,11 @@ pub fn constructFilePath(buf: []u8, dir: []const u8, path: []const u8, default_f
 
     // Add default file or request path
     if (req_path.len == 0) {
-        for (default_file) |c| {
-            buf[len] = c;
-            len += 1;
+        if (default_file.len > 0) {
+            for (default_file) |c| {
+                buf[len] = c;
+                len += 1;
+            }
         }
     } else {
         for (req_path) |c| {
@@ -234,18 +251,42 @@ pub fn constructFilePath(buf: []u8, dir: []const u8, path: []const u8, default_f
         }
     }
 
+    // Remove trailing slash for directories (Linux opendir doesn't like it)
+    if (len > 0 and buf[len - 1] == '/') {
+        len -= 1;
+    }
+
+    // Always null terminate
     buf[len] = 0;
+
+    // Debug: Print final path
+    print("DEBUG: Final path: '");
+    print(buf[0..len]);
+    print("'\n");
+
     return buf[0..len];
 }
 
 pub fn isDirectory(path: []const u8) bool {
+    // Handle leading ./
+    var clean_path = path;
+    if (path.len >= 2 and path[0] == '.' and path[1] == '/') {
+        clean_path = path[2..];
+    }
+
     var st: stat = undefined;
-    if (syscall(SYS_stat, path.ptr, &st) < 0) return false;
+    if (syscall(SYS_stat, clean_path.ptr, &st) < 0) return false;
     return (st.st_mode & S_IFDIR) != 0;
 }
 
 pub fn serveFile(client_socket: Socket, path: []const u8, send_body: bool) void {
-    const fd = syscall(SYS_open, path.ptr, @as(i64, O_RDONLY));
+    // Handle leading ./
+    var clean_path = path;
+    if (path.len >= 2 and path[0] == '.' and path[1] == '/') {
+        clean_path = path[2..];
+    }
+
+    const fd = syscall(SYS_open, clean_path.ptr, @as(i64, O_RDONLY));
     if (fd < 0) {
         @import("http.zig").sendErrorResponse(client_socket, 404, "Not Found", send_body);
         return;
@@ -321,12 +362,36 @@ pub fn serveFile(client_socket: Socket, path: []const u8, send_body: bool) void 
 }
 
 pub fn serveDirectory(client_socket: Socket, path: []const u8, request_path: []const u8, send_body: bool) void {
-    const dir = syscall(SYS_opendir, path.ptr);
-    if (dir < 0) {
+    // Clean the path for Linux
+    var clean_path = path;
+    if (path.len >= 2 and path[0] == '.' and path[1] == '/') {
+        clean_path = path[2..];
+    }
+
+    // Remove trailing slash if present
+    if (clean_path.len > 0 and clean_path[clean_path.len - 1] == '/') {
+        clean_path = clean_path[0 .. clean_path.len - 1];
+    }
+
+    // Debug: Print path being used
+    print("DEBUG: Opening directory: '");
+    print(clean_path);
+    print("'\n");
+
+    // Open the directory using open()
+    const dir_fd = syscall(SYS_open, clean_path.ptr, @as(i64, O_RDONLY));
+    if (dir_fd < 0) {
+        // Debug: Print error code
+        print("DEBUG: open failed with error code: ");
+        var err_buf: [20]u8 = undefined;
+        const err_len = intToBuffer(&err_buf, @as(u32, @intCast(-dir_fd)));
+        print(err_buf[0..err_len]);
+        print("\n");
+
         @import("http.zig").sendErrorResponse(client_socket, 500, "Error listing directory", send_body);
         return;
     }
-    defer _ = syscall(SYS_closedir, dir);
+    defer _ = syscall(SYS_close, dir_fd);
 
     var html_buf: [8192]u8 = undefined;
     var html_len: usize = 0;
@@ -339,19 +404,23 @@ pub fn serveDirectory(client_socket: Socket, path: []const u8, request_path: []c
             html_buf[html_len] = c;
             html_len += 1;
         }
+
         for (request_path) |c| {
             html_buf[html_len] = c;
             html_len += 1;
         }
+
         const html_header2 = "</title>\n</head>\n<body>\n<h1>Directory listing for ";
         for (html_header2) |c| {
             html_buf[html_len] = c;
             html_len += 1;
         }
+
         for (request_path) |c| {
             html_buf[html_len] = c;
             html_len += 1;
         }
+
         const html_list_start = "</h1>\n<hr>\n<ul>\n";
         for (html_list_start) |c| {
             html_buf[html_len] = c;
@@ -370,48 +439,60 @@ pub fn serveDirectory(client_socket: Socket, path: []const u8, request_path: []c
 
     // List directory contents
     const http = @import("http.zig");
+    var dir_buf: [8192]u8 align(8) = undefined; // Ensure buffer is properly aligned
+
     while (true) {
-        var entry: dirent = undefined;
-        const result = syscall(SYS_readdir, dir, &entry);
-        if (result <= 0) break;
+        const bytes_read = syscall(SYS_getdents64, dir_fd, &dir_buf, dir_buf.len);
+        if (bytes_read <= 0) break;
 
-        const name_len = strlen(&entry.d_name);
-        const name = entry.d_name[0..name_len];
+        var offset: usize = 0;
+        while (offset < @as(usize, @intCast(bytes_read))) {
+            const entry: *dirent = @ptrCast(@alignCast(&dir_buf[offset]));
+            const name_len = strlen(&entry.d_name);
+            const name = entry.d_name[0..name_len];
 
-        if (!http.eql(name, ".") and !http.eql(name, "..")) {
-            file_count += 1;
-            if (send_body) {
-                const li_start = "<li><a href=\"";
-                for (li_start) |c| {
-                    html_buf[html_len] = c;
+            if (!http.eql(name, ".") and !http.eql(name, "..")) {
+                file_count += 1;
+                if (send_body) {
+                    const li_start = "<li><a href=\"";
+                    for (li_start) |c| {
+                        html_buf[html_len] = c;
+                        html_len += 1;
+                    }
+
+                    for (name) |c| {
+                        html_buf[html_len] = c;
+                        html_len += 1;
+                    }
+
+                    if (entry.d_type == DT_DIR) {
+                        html_buf[html_len] = '/';
+                        html_len += 1;
+                    }
+
+                    html_buf[html_len] = '"';
                     html_len += 1;
-                }
-                for (name) |c| {
-                    html_buf[html_len] = c;
+                    html_buf[html_len] = '>';
                     html_len += 1;
-                }
-                if (entry.d_type == DT_DIR) {
-                    html_buf[html_len] = '/';
-                    html_len += 1;
-                }
-                html_buf[html_len] = '"';
-                html_len += 1;
-                html_buf[html_len] = '>';
-                html_len += 1;
-                for (name) |c| {
-                    html_buf[html_len] = c;
-                    html_len += 1;
-                }
-                if (entry.d_type == DT_DIR) {
-                    html_buf[html_len] = '/';
-                    html_len += 1;
-                }
-                const item_end = "</a></li>\n";
-                for (item_end) |c| {
-                    html_buf[html_len] = c;
-                    html_len += 1;
+
+                    for (name) |c| {
+                        html_buf[html_len] = c;
+                        html_len += 1;
+                    }
+
+                    if (entry.d_type == DT_DIR) {
+                        html_buf[html_len] = '/';
+                        html_len += 1;
+                    }
+
+                    const item_end = "</a></li>\n";
+                    for (item_end) |c| {
+                        html_buf[html_len] = c;
+                        html_len += 1;
+                    }
                 }
             }
+            offset += entry.d_reclen;
         }
     }
 
@@ -432,7 +513,9 @@ pub fn serveDirectory(client_socket: Socket, path: []const u8, request_path: []c
         header_buf[header_len] = c;
         header_len += 1;
     }
+
     header_len += intToBuffer(header_buf[header_len..], html_len);
+
     const end_headers = "\r\nConnection: close\r\n\r\n";
     for (end_headers) |c| {
         header_buf[header_len] = c;

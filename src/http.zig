@@ -147,33 +147,36 @@ fn handleConnection(client_socket: os.Socket, directory: []const u8) void {
         return;
     }
 
-    // Construct file path (OS-specific separator handled in windows.zig)
-    var path_buf: [260]u8 = undefined;
-    const full_path = os.constructFilePath(&path_buf, directory, request.path, "index.html");
+    // Construct directory path first (without index.html)
+    var dir_path_buf: [260]u8 = undefined;
+    const dir_path = os.constructFilePath(&dir_path_buf, directory, request.path, "");
 
-    // Try to serve the file directly first
-    if (!os.isDirectory(full_path)) {
-        os.serveFile(client_socket, full_path, send_body);
+    // Check if it's a directory first
+    if (os.isDirectory(dir_path)) {
+        // If it's a directory and doesn't end with '/', redirect
+        if (request.path.len == 0 or request.path[request.path.len - 1] != '/') {
+            sendRedirect(client_socket, request.path);
+            return;
+        }
+
+        // Try to serve index.html in the directory
+        var index_path_buf: [260]u8 = undefined;
+        const index_path = os.constructFilePath(&index_path_buf, directory, if (request.path.len > 0) request.path else "/", "index.html");
+
+        if (!os.isDirectory(index_path)) {
+            os.serveFile(client_socket, index_path, send_body);
+            return;
+        }
+
+        // Fall back to directory listing
+        os.serveDirectory(client_socket, dir_path, request.path, send_body);
         return;
     }
 
-    // If it's a directory and doesn't end with '/', redirect
-    if (request.path.len == 0 or request.path[request.path.len - 1] != '/') {
-        sendRedirect(client_socket, request.path);
-        return;
-    }
-
-    // Try to serve index.html in the directory
-    var index_path_buf: [260]u8 = undefined;
-    const index_path = os.constructFilePath(&index_path_buf, directory, if (request.path.len > 0) request.path else "/", "index.html");
-
-    if (!os.isDirectory(index_path)) {
-        os.serveFile(client_socket, index_path, send_body);
-        return;
-    }
-
-    // Fall back to directory listing
-    os.serveDirectory(client_socket, full_path, request.path, send_body);
+    // Try to serve the file directly
+    var file_path_buf: [260]u8 = undefined;
+    const file_path = os.constructFilePath(&file_path_buf, directory, request.path, "");
+    os.serveFile(client_socket, file_path, send_body);
 }
 
 fn sendRedirect(client_socket: os.Socket, path: []const u8) void {
