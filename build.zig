@@ -96,11 +96,11 @@ pub fn build(b: *std.Build) void {
     const run_server = if (target.result.os.tag == .windows) b.addSystemCommand(&[_][]const u8{
         "powershell",
         "-Command",
-        "cd www; ./http-zerver.exe 8000 . -v",
+        "cd www; ./http-zerver.exe 8000 .",
     }) else b.addSystemCommand(&[_][]const u8{
         "sh",
         "-c",
-        "cd www && ./http-zerver 8000 . -v",
+        "cd www && ./http-zerver 8000 .",
     });
     run_server.step.dependOn(&copy_exe.step);
 

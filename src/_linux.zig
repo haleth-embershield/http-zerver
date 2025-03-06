@@ -201,15 +201,6 @@ pub fn intToBuffer(buffer: []u8, value: anytype) usize {
 pub fn constructFilePath(buf: []u8, dir: []const u8, path: []const u8, default_file: []const u8) []u8 {
     var len: usize = 0;
 
-    // Debug: Print input parameters
-    print("DEBUG: Constructing path:\n  dir='");
-    print(dir);
-    print("'\n  path='");
-    print(path);
-    print("'\n  default_file='");
-    print(default_file);
-    print("'\n");
-
     // Handle directory path - remove leading ./ if present
     var clean_dir = dir;
     if (dir.len >= 2 and dir[0] == '.' and dir[1] == '/') {
@@ -258,11 +249,6 @@ pub fn constructFilePath(buf: []u8, dir: []const u8, path: []const u8, default_f
 
     // Always null terminate
     buf[len] = 0;
-
-    // Debug: Print final path
-    print("DEBUG: Final path: '");
-    print(buf[0..len]);
-    print("'\n");
 
     return buf[0..len];
 }
@@ -343,12 +329,6 @@ pub fn serveFile(client_socket: Socket, path: []const u8, send_body: bool) void 
         header_len += 1;
     }
 
-    // Debug: Print headers
-    print("DEBUG: Sending file response headers:\n");
-    print("----------------------------------------\n");
-    print(header_buf[0..header_len]);
-    print("\n----------------------------------------\n");
-
     _ = sendData(client_socket, header_buf[0..header_len]);
 
     if (send_body) {
@@ -373,21 +353,9 @@ pub fn serveDirectory(client_socket: Socket, path: []const u8, request_path: []c
         clean_path = clean_path[0 .. clean_path.len - 1];
     }
 
-    // Debug: Print path being used
-    print("DEBUG: Opening directory: '");
-    print(clean_path);
-    print("'\n");
-
     // Open the directory using open()
     const dir_fd = syscall(SYS_open, clean_path.ptr, @as(i64, O_RDONLY));
     if (dir_fd < 0) {
-        // Debug: Print error code
-        print("DEBUG: open failed with error code: ");
-        var err_buf: [20]u8 = undefined;
-        const err_len = intToBuffer(&err_buf, @as(u32, @intCast(-dir_fd)));
-        print(err_buf[0..err_len]);
-        print("\n");
-
         @import("http.zig").sendErrorResponse(client_socket, 500, "Error listing directory", send_body);
         return;
     }

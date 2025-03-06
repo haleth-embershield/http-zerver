@@ -4,9 +4,9 @@ const builtin = @import("builtin");
 
 // Import OS-specific implementations
 const os = if (builtin.os.tag == .windows)
-    @import("windows.zig")
+    @import("_windows.zig")
 else if (builtin.os.tag == .linux)
-    @import("linux.zig")
+    @import("_linux.zig")
 else
     @compileError("Unsupported operating system");
 
@@ -113,12 +113,6 @@ pub fn serve(port: u16, directory: []const u8, verbose: bool) !void {
     // Create and configure server socket
     const server_socket = try os.createServerSocket(port);
     defer os.closeSocket(server_socket);
-
-    os.print("HTTP server started on port ");
-    os.printInt(port);
-    os.print("\nServing directory: ");
-    os.print(directory);
-    os.print("\nPress Ctrl+C to stop\n");
 
     // Accept and handle connections
     while (true) {
@@ -234,12 +228,6 @@ fn sendRedirect(client_socket: os.Socket, path: []const u8) void {
         redirect_len += 1;
     }
 
-    // Debug: Print the response
-    os.print("DEBUG: Sending redirect response:\n");
-    os.print("----------------------------------------\n");
-    os.print(redirect_buf[0..redirect_len]);
-    os.print("\n----------------------------------------\n");
-
     _ = os.sendData(client_socket, redirect_buf[0..redirect_len]);
 }
 
@@ -311,15 +299,6 @@ pub fn sendErrorResponse(client_socket: os.Socket, status_code: u32, status_text
         response_buf[response_len] = c;
         response_len += 1;
     }
-
-    // Debug: Print the response
-    os.print("DEBUG: Sending error response:\n");
-    os.print("----------------------------------------\n");
-    os.print(response_buf[0..response_len]);
-    if (send_body) {
-        os.print(body_buf[0..body_len]);
-    }
-    os.print("\n----------------------------------------\n");
 
     // Send headers
     _ = os.sendData(client_socket, response_buf[0..response_len]);

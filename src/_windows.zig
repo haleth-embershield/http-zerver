@@ -321,12 +321,6 @@ pub fn serveFile(client_socket: Socket, path: []const u8, send_body: bool) void 
         header_len += 1;
     }
 
-    // Debug: Print the response headers
-    print("DEBUG: Sending file response headers:\n");
-    print("----------------------------------------\n");
-    print(header_buf[0..header_len]);
-    print("\n----------------------------------------\n");
-
     _ = sendData(client_socket, header_buf[0..header_len]);
     if (send_body) {
         var read_buf: [8192]u8 = undefined;

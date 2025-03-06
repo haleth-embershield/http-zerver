@@ -8,9 +8,9 @@ const builtin = @import("builtin");
 
 // Import OS-specific implementations
 const os = if (builtin.os.tag == .windows)
-    @import("windows.zig")
+    @import("_windows.zig")
 else if (builtin.os.tag == .linux)
-    @import("linux.zig")
+    @import("_linux.zig")
 else
     @compileError("Unsupported operating system");
 
@@ -75,7 +75,7 @@ fn parsePort(str: []const u8) u16 {
 pub fn main() !void {
     const args = try parseArgs();
 
-    print("build yourself: https://github.com/Hotschmoe/http-zerver\n");
+    print("build yourself: https://github.com/haleth-embershield/http-zerver\n\n");
     print("http-zerver: Starting HTTP server\n");
     print(version.getVersionString());
     print("\nListening at http://localhost:");
