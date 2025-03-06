@@ -311,10 +311,10 @@ pub fn serveFile(client_socket: Socket, path: []const u8, send_body: bool, metho
         clean_path = path[2..];
     }
 
-    // Use SYS_open for x86_64, SYS_openat for aarch64
+    // Use SYS_open for x86_64, SYS_openat for aarch64 with explicit casts
     const fd = switch (builtin.cpu.arch) {
         .x86_64 => syscall(SyscallNumbers.SYS_open, clean_path.ptr, @as(i64, O_RDONLY)),
-        .aarch64 => syscall(SyscallNumbers.SYS_openat, AT_FDCWD, clean_path.ptr, @as(i64, O_RDONLY), 0),
+        .aarch64 => syscall(SyscallNumbers.SYS_openat, @as(i64, AT_FDCWD), clean_path.ptr, @as(i64, O_RDONLY), @as(i64, 0)),
         else => unreachable,
     };
     if (fd < 0) {
@@ -397,10 +397,10 @@ pub fn serveDirectory(client_socket: Socket, path: []const u8, request_path: []c
         clean_path = clean_path[0 .. clean_path.len - 1];
     }
 
-    // Use SYS_open for x86_64, SYS_openat for aarch64
+    // Use SYS_open for x86_64, SYS_openat for aarch64 with explicit casts
     const dir_fd = switch (builtin.cpu.arch) {
         .x86_64 => syscall(SyscallNumbers.SYS_open, clean_path.ptr, @as(i64, O_RDONLY)),
-        .aarch64 => syscall(SyscallNumbers.SYS_openat, AT_FDCWD, clean_path.ptr, @as(i64, O_RDONLY), 0),
+        .aarch64 => syscall(SyscallNumbers.SYS_openat, @as(i64, AT_FDCWD), clean_path.ptr, @as(i64, O_RDONLY), @as(i64, 0)),
         else => unreachable,
     };
     if (dir_fd < 0) {
