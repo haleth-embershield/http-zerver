@@ -90,19 +90,43 @@ pub fn build(b: *std.Build) void {
     }) else b.addSystemCommand(&[_][]const u8{
         "sh",
         "-c",
-        "./http-zerver",
     });
     run_server.step.dependOn(&copy_exe.step);
 
     // Add arguments - either from command line or defaults
     if (b.args) |args| {
-        run_server.addArgs(args);
+        if (target.result.os.tag == .windows) {
+            run_server.addArgs(args);
+        } else {
+            // For Linux, construct the command with arguments
+            var cmd_buf: [256]u8 = undefined;
+            var cmd_len: usize = 0;
+
+            // Start with the executable
+            const base_cmd = "./http-zerver";
+            @memcpy(cmd_buf[0..base_cmd.len], base_cmd);
+            cmd_len = base_cmd.len;
+
+            // Add each argument
+            for (args) |arg| {
+                cmd_buf[cmd_len] = ' ';
+                cmd_len += 1;
+                @memcpy(cmd_buf[cmd_len .. cmd_len + arg.len], arg);
+                cmd_len += arg.len;
+            }
+
+            run_server.addArg(cmd_buf[0..cmd_len]);
+        }
     } else {
         // Use default arguments
-        run_server.addArg("--port");
-        run_server.addArg("8000");
-        run_server.addArg("--dir");
-        run_server.addArg("www");
+        if (target.result.os.tag == .windows) {
+            run_server.addArg("--port");
+            run_server.addArg("8000");
+            run_server.addArg("--dir");
+            run_server.addArg("www");
+        } else {
+            run_server.addArg("./http-zerver --port 8000 --dir www");
+        }
     }
 
     custom_run_step.dependOn(&run_server.step);
