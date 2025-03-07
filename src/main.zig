@@ -31,7 +31,7 @@ fn parseArgs() !struct { port: u16, directory: []const u8 } {
 
     // Default values
     var port: u16 = 8000;
-    var dir_str: []const u8 = "www";
+    var dir_str: []const u8 = ".";
 
     // Parse arguments
     while (args.next()) |arg| {
