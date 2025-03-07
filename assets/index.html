@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTTP-Zerver Test Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #2c3e50;
+            margin-top: 30px;
+        }
+        .container {
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .success {
+            color: #27ae60;
+            font-weight: bold;
+        }
+        .feature {
+            background-color: #eaf2f8;
+            border-left: 4px solid #3498db;
+            padding: 10px 15px;
+            margin: 15px 0;
+        }
+        code {
+            background-color: #f0f0f0;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        .command {
+            background-color: #2c3e50;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome to HTTP-Zerver!</h1>
+        <p>If you're seeing this page, your Zig HTTP server is working correctly.</p>
+        <p class="success">✓ Server is running successfully</p>
+        
+        <h2>About HTTP-Zerver</h2>
+        <p>This is a minimal HTTP server written in Zig without using the standard library, designed specifically for Windows.</p>
+        <p>It serves static files from a local directory and demonstrates low-level networking and file I/O in Zig.</p>
+        
+        <h2>New Features</h2>
+        
+        <div class="feature">
+            <h3>Directory Listing</h3>
+            <p>The server now supports directory listing! When you request a directory without an index.html file, the server will generate a nice HTML page showing all files and subdirectories.</p>
+            <p>Try it out by:</p>
+            <ol>
+                <li>Creating a directory without an index.html file</li>
+                <li>Navigating to that directory in your browser</li>
+            </ol>
+        </div>
+        
+        <div class="feature">
+            <h3>Verbose Logging</h3>
+            <p>You can now enable verbose logging to see detailed information about requests and responses.</p>
+            <p>Start the server with the <code>-v</code> or <code>-verbose</code> flag:</p>
+            <div class="command">zig build run -- 8000 . -v</div>
+            <p>This will show:</p>
+            <ul>
+                <li>Detailed request information</li>
+                <li>File paths being accessed</li>
+                <li>Response headers</li>
+                <li>Connection status</li>
+            </ul>
+        </div>
+        
+        <h2>Command Line Usage</h2>
+        <p>The server can be started with the following options:</p>
+        <div class="command">zig build run -- [PORT] [DIRECTORY] [-v|-verbose]</div>
+        <p>Where:</p>
+        <ul>
+            <li><strong>PORT</strong>: The port to listen on (default: 8000)</li>
+            <li><strong>DIRECTORY</strong>: The directory to serve files from (default: current directory)</li>
+            <li><strong>-v|-verbose</strong>: Enable verbose logging</li>
+        </ul>
+        
+        <h2>Example</h2>
+        <p>To serve files from the "public" directory on port 9000 with verbose logging:</p>
+        <div class="command">zig build run -- 9000 public -v</div>
+    </div>
+</body>
+</html> 
