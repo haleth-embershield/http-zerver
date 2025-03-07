@@ -21,11 +21,9 @@ fn print(message: []const u8) void {
 
 // Parse command line arguments
 fn parseArgs() !struct { port: u16, directory: []const u8 } {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-
-    var args = try std.process.argsWithAllocator(allocator);
+    // Use a general purpose allocator instead of arena
+    const gpa = std.heap.page_allocator;
+    var args = try std.process.argsWithAllocator(gpa);
     defer args.deinit();
 
     // Skip program name
@@ -33,21 +31,26 @@ fn parseArgs() !struct { port: u16, directory: []const u8 } {
 
     // Default values
     var port: u16 = 8000;
-    var directory: []const u8 = ".";
+    var dir_str: []const u8 = "www";
 
     // Parse arguments
     while (args.next()) |arg| {
-        // Handle positional arguments
-        if (port == 8000) {
-            // First positional arg is port
-            port = parsePort(arg);
-        } else {
-            // Second positional arg is directory
-            directory = arg;
+        if (std.mem.eql(u8, arg, "--port")) {
+            if (args.next()) |port_str| {
+                port = parsePort(port_str);
+            }
+        } else if (std.mem.eql(u8, arg, "--dir")) {
+            if (args.next()) |dir| {
+                dir_str = dir;
+            }
         }
     }
 
-    return .{ .port = port, .directory = directory };
+    // Create a persistent copy of the directory string
+    const dir_copy = try gpa.alloc(u8, dir_str.len);
+    @memcpy(dir_copy, dir_str);
+
+    return .{ .port = port, .directory = dir_copy };
 }
 
 // Parse port number from string
@@ -60,17 +63,23 @@ fn parsePort(str: []const u8) u16 {
             break;
         }
     }
-    return if (result > 0) result else 8000;
+    return if (result > 0 and result < 65536) result else 8000;
 }
 
 // Entry point
 pub fn main() !void {
     const args = try parseArgs();
+    // Ensure cleanup of allocated memory
+    defer std.heap.page_allocator.free(args.directory);
+
+    // Initialize networking first
+    try os.initNetworking();
+    defer os.cleanupNetworking();
 
     print("\nStarting HTTP Zerver...\n");
     print(version.getVersionString());
     print("\nListening at http://localhost:");
-    os.printInt(args.port);
+    printInt(args.port);
     print("\nServing directory: ");
     print(args.directory);
     print("\n\n");

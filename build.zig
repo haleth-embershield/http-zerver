@@ -49,62 +49,61 @@ pub fn build(b: *std.Build) void {
     }
 
     // Create a custom run step that:
-    // 1. Deletes all files in /www
+    // 1. Creates and cleans /www directory
     // 2. Copies /assets to /www
-    // 3. Copies the executable to /www
-    // 4. Runs the server from /www on port 8000
-    const custom_run_step = b.step("run", "Run the HTTP server from /www directory");
+    // 3. Keeps executable in root
+    // 4. Runs the server from root serving /www on port 8000
+    const custom_run_step = b.step("run", "Run the HTTP server serving /www directory");
 
     // Platform-specific commands for directory operations
-    const clear_www = if (target.result.os.tag == .windows) b.addSystemCommand(&[_][]const u8{
+    const setup_www = if (target.result.os.tag == .windows) b.addSystemCommand(&[_][]const u8{
         "powershell",
         "-Command",
-        "if (Test-Path www) { Remove-Item -Path www\\* -Recurse -Force }; if (-not (Test-Path www)) { New-Item -ItemType Directory -Path www }",
+        "if (Test-Path www) { Remove-Item -Path www\\* -Recurse -Force }; if (-not (Test-Path www)) { New-Item -ItemType Directory -Path www }; if (Test-Path assets) { Copy-Item -Path assets\\* -Destination www\\ -Recurse -Force }",
     }) else b.addSystemCommand(&[_][]const u8{
         "sh",
         "-c",
-        "rm -rf www/* && mkdir -p www",
+        "rm -rf www/* && mkdir -p www && if [ -d assets ]; then cp -r assets/* www/ 2>/dev/null || true; fi",
     });
 
-    // Copy assets
-    const copy_assets = if (target.result.os.tag == .windows) b.addSystemCommand(&[_][]const u8{
-        "powershell",
-        "-Command",
-        "if (Test-Path assets) { Copy-Item -Path assets\\* -Destination www\\ -Recurse -Force }",
-    }) else b.addSystemCommand(&[_][]const u8{
-        "sh",
-        "-c",
-        "if [ -d assets ]; then cp -r assets/* www/ 2>/dev/null || true; fi",
-    });
-    copy_assets.step.dependOn(&clear_www.step);
-
-    // Copy executable
+    // Copy executable to root
     const exe_path = b.fmt("{s}/bin/http-zerver{s}", .{ b.install_path, if (target.result.os.tag == .windows) ".exe" else "" });
     const copy_exe = if (target.result.os.tag == .windows) b.addSystemCommand(&[_][]const u8{
         "powershell",
         "-Command",
         "Copy-Item",
         exe_path,
-        "www/http-zerver.exe",
+        "http-zerver.exe",
     }) else b.addSystemCommand(&[_][]const u8{
         "cp",
         exe_path,
-        "www/http-zerver",
+        "http-zerver",
     });
     copy_exe.step.dependOn(b.getInstallStep());
-    copy_exe.step.dependOn(&copy_assets.step);
+    copy_exe.step.dependOn(&setup_www.step);
 
-    // Run server from /www
+    // Run server from root directory serving www
     const run_server = if (target.result.os.tag == .windows) b.addSystemCommand(&[_][]const u8{
         "powershell",
         "-Command",
-        "cd www; ./http-zerver.exe 8000 .",
+        "./http-zerver.exe",
     }) else b.addSystemCommand(&[_][]const u8{
         "sh",
         "-c",
-        "cd www && ./http-zerver 8000 .",
+        "./http-zerver",
     });
     run_server.step.dependOn(&copy_exe.step);
+
+    // Add arguments - either from command line or defaults
+    if (b.args) |args| {
+        run_server.addArgs(args);
+    } else {
+        // Use default arguments
+        run_server.addArg("--port");
+        run_server.addArg("8000");
+        run_server.addArg("--dir");
+        run_server.addArg("www");
+    }
 
     custom_run_step.dependOn(&run_server.step);
 }
