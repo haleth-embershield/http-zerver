@@ -7,6 +7,7 @@ www/
 test-results.txt
 *.bin
 version_date.txt
+http-zerver
 
 # Binaries
 *.exe
